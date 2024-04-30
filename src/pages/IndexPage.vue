@@ -2,9 +2,25 @@
   <q-page class="row q-pt-xl">
     <div class="full-width q-px-xl">
       <div class="q-mb-xl">
-        <q-input v-model="tempData.name" label="姓名" />
-        <q-input v-model="tempData.age" label="年齡" />
-        <q-btn color="primary" class="q-mt-md">新增</q-btn>
+        <form @submit.prevent.stop="onSubmit">
+          <q-input
+            v-model="tempData.name"
+            label="姓名"
+            ref="nameRef"
+            lazy-rule
+            :rules="nameRules"
+          />
+          <q-input
+            v-model="tempData.age"
+            label="年齡"
+            ref="ageRef"
+            lazy-rule
+            :rules="ageRules"
+          />
+          <q-btn type="submit" color="primary" class="q-mt-md">{{
+            isEdit ? '更新' : '新增'
+          }}</q-btn>
+        </form>
       </div>
 
       <q-table
@@ -79,13 +95,14 @@
 
 <script setup lang="ts">
 import axios from 'axios';
-import { QTableProps } from 'quasar';
-import { ref } from 'vue';
+import { QTableProps, useQuasar } from 'quasar';
+import { ref, onMounted } from 'vue';
 interface btnType {
   label: string;
   icon: string;
   status: string;
 }
+const $q = useQuasar();
 const blockData = ref([
   {
     name: 'test',
@@ -119,12 +136,127 @@ const tableButtons = ref([
   },
 ]);
 
+const nameRef = ref();
+const ageRef = ref();
+
+const nameRules = [
+  (v) => !!v || '請輸入姓名',
+  (v) => (v && v.length <= 10) || '姓名最多10個字',
+];
+
+const ageRules = [
+  (v) => !!v || '請輸入年齡',
+  (v) => (v && v >= 0) || '年齡需大於0',
+];
+
 const tempData = ref({
   name: '',
   age: '',
 });
+
+const isEdit = ref(false);
+const editId = ref('');
+
+onMounted(() => {
+  getList();
+});
+
+async function onSubmit(): Promise<void> {
+  nameRef.value.validate();
+  ageRef.value.validate();
+  if (nameRef.value.hasError || ageRef.value.hasError) {
+    return;
+  }
+  const { name, age } = tempData.value;
+  try {
+    if (!isEdit.value) {
+      await axios.post('https://dahua.metcfire.com.tw/api/CRUDTest', {
+        name,
+        age,
+      });
+    } else {
+      await axios.patch(`https://dahua.metcfire.com.tw/api/CRUDTest`, {
+        name,
+        age,
+        id: editId.value,
+      });
+      isEdit.value = false;
+      editId.value = '';
+    }
+    tempData.value = {
+      name: '',
+      age: '',
+    };
+    getList();
+    nameRef.value.resetValidation();
+    ageRef.value.resetValidation();
+  } catch (error) {
+    console.error(error);
+  }
+}
+
 function handleClickOption(btn, data) {
   // ...
+  const buttonStatus = btn?.status;
+  switch (buttonStatus) {
+    case 'edit':
+      // ...
+      const { name, age } = data;
+      tempData.value = {
+        name,
+        age,
+      };
+      isEdit.value = true;
+      editId.value = data.id;
+      break;
+    case 'delete':
+      handleDelete(data.id);
+      break;
+    default:
+      break;
+  }
+}
+
+async function getList(): Promise<void> {
+  const { data }: { data: { id: string; name: string; age: number }[] } =
+    await axios.get('https://dahua.metcfire.com.tw/api/CRUDTest/a');
+  blockData.value = data;
+}
+
+function handleDelete(id: string): void {
+  $q.dialog({
+    title: '提示',
+    message: '是否確定刪除該筆資料',
+    persistent: true,
+    ok: {
+      label: '確定',
+      color: 'negative',
+    },
+    cancel: {
+      label: '取消',
+      color: 'grey-8',
+    },
+  })
+    .onOk(async () => {
+      try {
+        await axios.delete(`https://dahua.metcfire.com.tw/api/CRUDTest/${id}`);
+        getList();
+      } catch (error) {
+        console.error(error);
+      }
+    })
+    .onCancel(() => {
+      console.log('Cancel');
+    })
+    .onDismiss(() => {
+      console.log('I am triggered on both OK and Cancel');
+    });
+  // try {
+  //   await axios.delete(`https://dahua.metcfire.com.tw/api/CRUDTest/${id}`);
+  //   getList();
+  // } catch (error) {
+  //   console.error(error);
+  // }
 }
 </script>
 
